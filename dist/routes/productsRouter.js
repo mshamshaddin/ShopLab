@@ -22,12 +22,25 @@ const errorResponse = (error, res) => {
     console.error("FAIL", error);
     res.status(500).json({ message: "Internal Server Error" });
 };
-//localhost:3000/api/Products
+//localhost:3000/api/Products/?maxPrice=10
 productsRouter.get("/Products", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield client.connect();
         const collection = client.db().collection('products');
-        const products = yield collection.find({}).toArray();
+        const { maxPrice, includes, limit } = req.query;
+        const query = {};
+        if (req.query.maxPrice) {
+            query.price = { $lte: parseFloat(maxPrice) };
+        }
+        if (req.query.includes) {
+            query.name = { $regex: includes, $options: 'i' };
+        }
+        let cursor = collection.find(query);
+        if (req.query.limit) {
+            const parsedLimit = parseInt(limit, 10);
+            cursor = cursor.limit(parsedLimit);
+        }
+        const products = yield cursor.toArray();
         res.status(200).json(products);
     }
     catch (error) {
@@ -37,6 +50,7 @@ productsRouter.get("/Products", (req, res) => __awaiter(void 0, void 0, void 0, 
         yield client.close();
     }
 }));
+//http://localhost:3000/api/Products/find/673e95abe17b2ffa33473d0f
 productsRouter.get("/Products/find/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield client.connect();

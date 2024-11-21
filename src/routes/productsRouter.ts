@@ -14,13 +14,34 @@ const errorResponse = (error: any, res: any) => {
         res.status(500).json({message: "Internal Server Error"});
 }
 
-//localhost:3000/api/Products
+//localhost:3000/api/Products/?maxPrice=10
 productsRouter.get("/Products", async (req, res) => {
         try {
             await client.connect();
             const collection = client.db().collection<Product>('products');
-            const products = await collection.find({}).toArray();
+
+            const { maxPrice, includes, limit } = req.query;
+
+            const query: any = {};
+            if (req.query.maxPrice) {
+              query.price = { $lte: parseFloat(maxPrice as string) };
+            }
+
+            if (req.query.includes) {
+              query.name = { $regex: includes as string, $options: 'i' };
+            }
+          
+            let cursor = collection.find(query);
+          
+            if (req.query.limit) {
+              const parsedLimit = parseInt(limit as string, 10);
+              cursor = cursor.limit(parsedLimit);
+            }
+                      
+            const products = await cursor.toArray();
             res.status(200).json(products);
+
+            
         } catch (error) {
             errorResponse(error, res);                
         } finally {
@@ -28,7 +49,7 @@ productsRouter.get("/Products", async (req, res) => {
         }
 });
     
-
+//http://localhost:3000/api/Products/find/673e95abe17b2ffa33473d0f
 productsRouter.get("/Products/find/:id", async (req, res) => {
         try{
                 await client.connect();
@@ -36,10 +57,11 @@ productsRouter.get("/Products/find/:id", async (req, res) => {
 
                 const product = await collection.findOne({_id: new ObjectId(req.params.id) });
                 if (!product) {
-                        res.status(404).send("Product not found");
+                          res.status(404).send("Product not found");
                       } else {
-                        res.status(200).json(product);
+                         res.status(200).json(product);
                       }
+                
                     } catch (error) {
                       errorResponse(error, res);
                     } finally {
@@ -48,7 +70,7 @@ productsRouter.get("/Products/find/:id", async (req, res) => {
 
 });
 
-
+//http://localhost:3000/api/Products
 productsRouter.post('/Products', async (req, res) => {
         try {
             await client.connect();
@@ -62,5 +84,59 @@ productsRouter.post('/Products', async (req, res) => {
             await client.close();
         }
 });
+
+
+productsRouter.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const updatedProduct = req.body;
+
+  try {
+    await client.connect();
+    const collection = client.db().collection('products');
+
+    const result = await collection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: updatedProduct },
+      { returnDocument: 'after' }
+    );
+
+    if (!result || !result.value) {
+      res.status(404).send('Product not found');
+      return;
+    }
+
+    res.status(200).json(result.value);
+
+  } catch (error) {
+    errorResponse(error, res);
+  } finally {
+    await client.close();
+  }
+});
+
+
+productsRouter.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await client.connect();
+    const collection = client.db().collection('products');
+
+    const result = await collection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      res.status(404).send('Product not found');
+      return;
+    }
+
+    res.status(204).send(); 
+
+  } catch (error) {
+    errorResponse(error, res);
+  } finally {
+    await client.close();
+  }
+});
+
 
 export default productsRouter;
